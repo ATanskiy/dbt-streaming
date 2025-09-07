@@ -1,0 +1,144 @@
+version: "3.9"
+
+services:
+  # --------------------
+  # Kafka & Confluent
+  # --------------------
+  zookeeper:
+    container_name: zookeeper_dbt_streaming
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "22181:2181"
+    networks:
+      - validation_net
+
+  kafka_broker:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka_dbt_streaming
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka_broker:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_JMX_PORT: 9101
+      KAFKA_JMX_HOSTNAME: localhost
+    networks:
+      - validation_net
+
+  control-center:
+    image: confluentinc/cp-enterprise-control-center:7.5.0
+    container_name: ccc_dbt_streaming
+    depends_on:
+      - kafka_broker
+      - zookeeper
+    environment:
+      CONTROL_CENTER_BOOTSTRAP_SERVERS: kafka_broker:9092
+      CONTROL_CENTER_ZOOKEEPER_CONNECT: zookeeper:2181
+      CONTROL_CENTER_REPLICATION_FACTOR: 1
+      CONTROL_CENTER_INTERNAL_TOPICS_PARTITIONS: 1
+      CONTROL_CENTER_MONITORING_INTERCEPTOR_TOPIC_PARTITIONS: 1
+      CONTROL_CENTER_STREAMS_NUM_STREAM_THREADS: 2
+    ports:
+      - "9021:9021"
+    networks:
+      - validation_net
+
+  # -------------------------
+  # Spark with Iceberg + Kafka + MinIO Support
+  # -------------------------
+  spark:
+    image: bitnami/spark:3.5
+    container_name: spark_dbt_streaming
+    user: root
+    environment:
+      - SPARK_MODE=master
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+    volumes:
+      - ./spark_jobs:/opt/spark/jobs
+      - ./configs/spark/jars:/opt/spark/jars
+      - ./configs/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+    ports:
+      - "4050:4040"   # Spark UI
+      - "15003:15003" # Spark Connect (gRPC)
+    networks:
+      - validation_net
+
+  # # ------------------
+  # # Dremio for Iceberg and MinIO
+  # # ------------------
+  # dremio:
+  #   image: dremio/dremio-oss:24.1
+  #   container_name: dremio_dbt_streaming
+  #   ports:
+  #     - "9047:9047"   # Dremio Web UI
+  #     - "31010:31010" # JDBC/ODBC
+  #     - "45678:45678" # internal
+  #   volumes:
+  #     - dremio-data:/opt/dremio/data
+  #   environment:
+  #     - DREMIO_MAX_HEAP_MEMORY_SIZE_MB=4096
+  #     - DREMIO_MAX_DIRECT_MEMORY_SIZE_MB=4096
+  #   restart: unless-stopped
+  #   networks:
+  #     - validation_net
+
+  # # ------------------
+  # # Trino for Iceberg and MinIO
+  # # ------------------
+  # trino:
+  #   image: trinodb/trino:latest
+  #   container_name: trino_dbt_streaming
+  #   ports:
+  #     - "8080:8080"
+  #   volumes:
+  #     - ./configs/trino/catalog:/etc/trino/catalog
+  #   networks:
+  #     - validation_net
+
+  # # ------------------
+  # # Nessie for Iceberg and MinIO
+  # # ------------------
+  # nessie:
+  #   image: ghcr.io/projectnessie/nessie:latest
+  #   container_name: nessie_dbt_streaming
+  #   environment:
+  #     QUARKUS_HTTP_PORT: "19120"
+  #   ports:
+  #     - "19120:19120"
+  #   networks:
+  #     - validation_net
+
+  minio:
+    image: minio/minio:RELEASE.2022-11-08T05-27-07Z
+    container_name: minio_dbt_streaming
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "19000:9000"
+      - "19001:9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - validation_net
+
+volumes:
+  # dremio-data:
+  minio-data:
+
+networks:
+  validation_net:
+    driver: bridge
