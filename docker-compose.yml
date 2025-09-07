@@ -13,7 +13,7 @@ services:
     ports:
       - "22181:2181"
     networks:
-      - validation_net
+      - streaming_net
 
   kafka_broker:
     image: confluentinc/cp-kafka:7.5.0
@@ -34,7 +34,7 @@ services:
       KAFKA_JMX_PORT: 9101
       KAFKA_JMX_HOSTNAME: localhost
     networks:
-      - validation_net
+      - streaming_net
 
   control-center:
     image: confluentinc/cp-enterprise-control-center:7.5.0
@@ -52,7 +52,7 @@ services:
     ports:
       - "9021:9021"
     networks:
-      - validation_net
+      - streaming_net
 
   # -------------------------
   # Spark with Iceberg + Kafka + MinIO Support
@@ -65,15 +65,41 @@ services:
       - SPARK_MODE=master
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
     volumes:
       - ./spark_jobs:/opt/spark/jobs
       - ./configs/spark/jars:/opt/spark/jars
       - ./configs/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+      - spark_dist:/opt/bitnami/spark   # expose Spark install
     ports:
       - "4050:4040"   # Spark UI
       - "15003:15003" # Spark Connect (gRPC)
+      - "7077:7077"   # Spark Master
     networks:
-      - validation_net
+      - streaming_net
+
+  thriftserver:
+    image: bitnami/spark:3.5
+    container_name: spark_thrift_dbt_streaming
+    user: root
+    ports:
+      - "10000:10000"   # Spark Thrift Server JDBC/ODBC
+      - "4040:4040"     # Spark UI
+    command: >
+      /opt/bitnami/spark/sbin/start-thriftserver.sh
+      --master local[*]
+      --conf spark.sql.warehouse.dir=/opt/spark-warehouse
+      --conf spark.sql.catalogImplementation=in-memory
+    depends_on:
+      - spark
+    volumes:
+      - ./warehouse:/opt/spark-warehouse
+    networks:
+      - streaming_net
+
 
   # # ------------------
   # # Dremio for Iceberg and MinIO
@@ -92,7 +118,7 @@ services:
   #     - DREMIO_MAX_DIRECT_MEMORY_SIZE_MB=4096
   #   restart: unless-stopped
   #   networks:
-  #     - validation_net
+  #     - streaming_net
 
   # # ------------------
   # # Trino for Iceberg and MinIO
@@ -105,7 +131,7 @@ services:
   #   volumes:
   #     - ./configs/trino/catalog:/etc/trino/catalog
   #   networks:
-  #     - validation_net
+  #     - streaming_net
 
   # # ------------------
   # # Nessie for Iceberg and MinIO
@@ -118,7 +144,7 @@ services:
   #   ports:
   #     - "19120:19120"
   #   networks:
-  #     - validation_net
+  #     - streaming_net
 
   minio:
     image: minio/minio:RELEASE.2022-11-08T05-27-07Z
@@ -133,12 +159,13 @@ services:
     volumes:
       - minio-data:/data
     networks:
-      - validation_net
+      - streaming_net
 
 volumes:
   # dremio-data:
   minio-data:
+  spark_dist:
 
 networks:
-  validation_net:
+  streaming_net:
     driver: bridge
