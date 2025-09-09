@@ -100,6 +100,18 @@ services:
     networks:
       - streaming_net
 
+  dbt:
+    build:
+      context: .
+      dockerfile: Dockerfile.dbt
+    container_name: dbt_streaming
+    volumes:
+      - ./dbt_streaming_demo:/usr/app
+    working_dir: /usr/app
+    networks:
+      - streaming_net
+    command: tail -f /dev/null   # keep it running
+
 
   # # ------------------
   # # Dremio for Iceberg and MinIO
