@@ -1,0 +1,57 @@
+# Test PostgreSQL connection
+docker exec -it postgresdb psql -U admin -d metastore_db -c "\dt"
+
+# Check MinIO is responding
+curl http://localhost:9000/minio/health/live
+
+# Check if metastore port 9083 is accessible
+Test-NetConnection -ComputerName localhost -Port 9083
+
+# Test if Thrift port 10000 is accessible
+Test-NetConnection -ComputerName localhost -Port 10000
+
+# spark
+# Test if Spark can reach metastore
+docker exec -it spark-thrift sh -c "nc -zv hive-metastore 9083"
+
+# Test if Spark can reach MinIO
+docker exec -it spark-thrift sh -c "nc -zv minio 9000"
+
+# Test if metastore can reach PostgreSQL
+docker exec -it hive-metastore sh -c "nc -zv postgresdb 5432"
+
+
+
+## spark-sql check
+docker exec -it spark-thrift /usr/spark/bin/spark-sql -e "SHOW DATABASES;"
+
+
+
+
+
+
+
+
+
+
+
+# example for entering query mode:
+# Open Spark SQL shell
+docker exec -it spark-thrift /usr/spark/bin/spark-sql
+
+# Create Iceberg table
+CREATE TABLE iceberg_test (
+    id BIGINT,
+    name STRING,
+    created_at TIMESTAMP
+) USING ICEBERG
+LOCATION 's3a://warehouse/iceberg_test'
+TBLPROPERTIES (
+    'write.format.default' = 'parquet'
+);
+
+# Insert data
+INSERT INTO iceberg_test VALUES (1, 'test', current_timestamp());
+
+# Query it
+SELECT * FROM iceberg_test;

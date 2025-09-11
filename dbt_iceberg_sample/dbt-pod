@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+podman run \
+--network=docker_dbt_sample_network \
+--mount type=bind,source=./,target=/usr/app \
+--mount type=bind,source=./,target=/root/.dbt/ \
+ghcr.io/dbt-labs/dbt-spark \
+$@

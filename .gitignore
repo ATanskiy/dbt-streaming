@@ -1,6 +1,10 @@
 .venv
 .vscode
 .env
-
-configs
 logs
+
+__pycache__
+.hive-metastore
+.minio-data
+.spark-warehouse
+docs
