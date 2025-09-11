@@ -1,0 +1,38 @@
+ARG OPENJDK_VERSION=8
+FROM openjdk:${OPENJDK_VERSION}-jre-slim
+
+ARG BUILD_DATE
+ARG SPARK_VERSION=3.5.1
+ARG HADOOP_VERSION=3
+
+LABEL org.label-schema.name="Apache Spark ${SPARK_VERSION}" \
+      org.label-schema.build-date=$BUILD_DATE \
+      org.label-schema.version=$SPARK_VERSION      
+      
+ENV SPARK_HOME /usr/spark
+ENV PATH="/usr/spark/bin:/usr/spark/sbin:${PATH}"
+  
+RUN apt-get update && \
+    apt-get install -y wget netcat procps libpostgresql-jdbc-java && \
+    wget --progress=bar:force "https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}.tgz" && \
+    tar xzf "spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}.tgz" && \
+    rm "spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}.tgz" && \
+    mv "spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}" /usr/spark && \
+    ln -s /usr/share/java/postgresql-jdbc4.jar /usr/spark/jars/postgresql-jdbc4.jar
+
+# Installing libraries
+RUN wget --progress=bar:force "https://search.maven.org/remotecontent?filepath=org/apache/iceberg/iceberg-spark-runtime-3.5_2.12/1.5.2/iceberg-spark-runtime-3.5_2.12-1.5.2.jar" && \
+    wget --progress=bar:force "https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.3/hadoop-aws-3.3.3.jar" && \
+    wget --progress=bar:force "https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.754/aws-java-sdk-bundle-1.12.754.jar" && \
+    mv remotecontent?filepath=org%2Fapache%2Ficeberg%2Ficeberg-spark-runtime-3.5_2.12%2F1.5.2%2Ficeberg-spark-runtime-3.5_2.12-1.5.2.jar /usr/spark/jars/ && \
+    mv hadoop-aws-3.3.3.jar /usr/spark/jars/ && \
+    mv aws-java-sdk-bundle-1.12.754.jar /usr/spark/jars/ && \
+    apt-get remove -y wget && \
+    apt-get autoremove -y && \
+    apt-get clean
+
+COPY docker/entrypoint.sh /scripts/
+RUN chmod +x /scripts/entrypoint.sh
+
+ENTRYPOINT ["/scripts/entrypoint.sh"]
+CMD ["--help"]
